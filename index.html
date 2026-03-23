@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>星链追踪 · Satellite Tracker</title>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+<link  href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#020408;color:#c8e0ff;overflow:hidden;height:100vh}
+#cesiumContainer{position:absolute;inset:0}
+.cesium-widget-credits{display:none!important}
+#topbar{position:absolute;top:0;left:0;right:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:linear-gradient(to bottom,rgba(2,4,10,.92),transparent);pointer-events:none}
+.logo-name{font-size:19px;font-weight:700;color:#e0f0ff;letter-spacing:.08em}
+.logo-sub{font-size:10px;color:rgba(160,200,255,.35);letter-spacing:.2em;margin-top:2px}
+#utc-clock{font-size:13px;color:rgba(160,200,255,.65);font-family:'Courier New',monospace;letter-spacing:.05em}
+#panel{position:absolute;top:72px;right:20px;z-index:10;display:flex;flex-direction:column;gap:6px}
+.cb{display:flex;align-items:center;gap:10px;padding:9px 14px;background:rgba(2,8,22,.88);border:.5px solid rgba(100,160,255,.2);border-radius:10px;cursor:pointer;transition:all .2s;backdrop-filter:blur(14px);min-width:190px}
+.cb:hover{border-color:rgba(100,160,255,.5)}
+.cb.off{opacity:.28}
+.cdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.cname{font-size:12px;font-weight:600;color:#e0f0ff}
+.ccnt{font-size:10px;color:rgba(160,200,255,.4);margin-top:1px}
+.ctog{margin-left:auto;width:26px;height:15px;border-radius:8px;background:rgba(255,255,255,.08);position:relative;transition:background .2s}
+.cb:not(.off) .ctog{background:rgba(80,180,255,.35)}
+.ctog::after{content:'';position:absolute;top:2.5px;left:2.5px;width:10px;height:10px;border-radius:50%;background:rgba(160,200,255,.4);transition:transform .2s,background .2s}
+.cb:not(.off) .ctog::after{transform:translateX(11px);background:#80d0ff}
+#sat-card{position:absolute;top:72px;left:20px;z-index:10;width:272px;background:rgba(2,6,18,.94);border:.5px solid rgba(100,180,255,.18);border-top:2px solid #60a8ff;border-radius:0 0 14px 14px;padding:14px 16px;backdrop-filter:blur(20px);display:none;animation:sIn .3s ease}
+@keyframes sIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.sh{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.sname{font-size:15px;font-weight:700;color:#e0f0ff;line-height:1.3}
+.stype{font-size:10px;color:rgba(160,200,255,.4);margin-top:3px;letter-spacing:.05em}
+.cls{font-size:15px;color:rgba(160,200,255,.3);cursor:pointer;padding:0 3px;transition:color .2s}
+.cls:hover{color:rgba(160,200,255,.8)}
+.sdiv{height:.5px;background:rgba(100,160,255,.1);margin-bottom:10px}
+.sstats{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}
+.si{background:rgba(80,140,255,.05);border:.5px solid rgba(100,160,255,.1);border-radius:7px;padding:7px 10px}
+.sl{font-size:10px;color:rgba(160,200,255,.38);letter-spacing:.04em;margin-bottom:3px}
+.sv{font-size:15px;font-weight:700;color:#90d0ff;font-family:'Courier New',monospace}
+.su{font-size:10px;color:rgba(160,200,255,.32);margin-left:2px;font-weight:400}
+.spos{font-size:11px;color:rgba(160,200,255,.48);font-family:'Courier New',monospace;line-height:1.9}
+.scov{margin-top:8px;display:flex;align-items:center;gap:8px}
+.covlbl{font-size:10px;color:rgba(160,200,255,.38);white-space:nowrap}
+.covbar{flex:1;height:3px;background:rgba(100,160,255,.1);border-radius:2px;overflow:hidden}
+.covfill{height:100%;border-radius:2px;background:linear-gradient(90deg,#1060ff,#60d0ff);transition:width .5s}
+#statsbar{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);z-index:10;display:flex;align-items:center;background:rgba(2,8,22,.88);border:.5px solid rgba(100,160,255,.14);border-radius:30px;overflow:hidden;backdrop-filter:blur(14px)}
+.sseg{display:flex;align-items:center;gap:7px;padding:9px 18px;border-right:.5px solid rgba(100,160,255,.07);font-size:12px;color:rgba(160,200,255,.5)}
+.sseg:last-child{border-right:none}
+.sdot{width:7px;height:7px;border-radius:50%}
+.snum{font-weight:700;color:#c0e0ff;font-variant-numeric:tabular-nums;margin-left:2px}
+#mbtn{position:absolute;bottom:22px;right:22px;z-index:10;width:52px;height:52px;border-radius:50%;background:rgba(2,8,22,.88);border:.5px solid rgba(180,120,255,.3);color:#c090ff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .25s;backdrop-filter:blur(14px)}
+#mbtn:hover{border-color:rgba(180,120,255,.7);background:rgba(70,25,160,.3);transform:scale(1.1);box-shadow:0 0 22px rgba(160,100,255,.3)}
+#mbtn.on{background:rgba(90,35,200,.42);border-color:#c080ff;animation:mp 1.5s ease-in-out infinite}
+@keyframes mp{0%,100%{box-shadow:0 0 0 0 rgba(180,120,255,.5)}50%{box-shadow:0 0 0 14px rgba(180,120,255,0)}}
+#loading{position:absolute;inset:0;z-index:100;background:#020408;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity 1s ease}
+#loading.gone{opacity:0;pointer-events:none}
+.lion{font-size:44px;animation:lsp 10s linear infinite}
+@keyframes lsp{to{transform:rotate(360deg)}}
+.ltitle{font-size:34px;font-weight:700;color:#c0e0ff;letter-spacing:.15em}
+.lsub{font-size:11px;color:rgba(160,200,255,.28);letter-spacing:.25em}
+.lbar{width:220px;height:2px;background:rgba(100,160,255,.08);border-radius:1px;overflow:hidden}
+.lfill{height:100%;background:linear-gradient(90deg,#1060ff,#60c0ff);border-radius:1px;width:0%;transition:width .5s ease}
+.lstatus{font-size:12px;color:rgba(160,200,255,.42);font-family:'Courier New',monospace;min-height:18px}
+#hint{position:absolute;bottom:75px;left:22px;z-index:9;font-size:11px;color:rgba(160,200,255,.28);line-height:2.3;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+<div id="loading">
+  <div class="lion">&#128752;</div>
+  <div class="ltitle">&#26143;&#38142;&#36844;&#36394;</div>
+  <div class="lsub">REAL-TIME SATELLITE TRACKER</div>
+  <div class="lbar"><div class="lfill" id="lfill"></div></div>
+  <div class="lstatus" id="lstatus">&#27491;&#22312;&#21021;&#22987;&#21270;...</div>
+</div>
+<div id="topbar">
+  <div><div class="logo-name">&#128752; &#26143;&#38142;&#36844;&#36394;</div><div class="logo-sub">REAL-TIME SATELLITE TRACKER</div></div>
+  <div id="utc-clock">UTC --:--:--</div>
+</div>
+<div id="panel">
+  <div class="cb" id="cb-starlink" onclick="toggle('starlink')">
+    <div class="cdot" style="background:#a78bfa;box-shadow:0 0 6px #a78bfa"></div>
+    <div><div class="cname">Starlink</div><div class="ccnt" id="cnt-starlink">&#21152;&#36733;&#20013;...</div></div>
+    <div class="ctog"></div>
+  </div>
+  <div class="cb" id="cb-gps" onclick="toggle('gps')">
+    <div class="cdot" style="background:#60a5fa;box-shadow:0 0 6px #60a5fa"></div>
+    <div><div class="cname">GPS</div><div class="ccnt" id="cnt-gps">&#21152;&#36733;&#20013;...</div></div>
+    <div class="ctog"></div>
+  </div>
+  <div class="cb" id="cb-beidou" onclick="toggle('beidou')">
+    <div class="cdot" style="background:#fb923c;box-shadow:0 0 6px #fb923c"></div>
+    <div><div class="cname">&#21271;&#26007; BeiDou</div><div class="ccnt" id="cnt-beidou">&#21152;&#36733;&#20013;...</div></div>
+    <div class="ctog"></div>
+  </div>
+  <div class="cb" id="cb-iss" onclick="toggle('iss')">
+    <div class="cdot" style="background:#34d399;box-shadow:0 0 6px #34d399"></div>
+    <div><div class="cname">&#22269;&#38469;&#31354;&#38388;&#31449; ISS</div><div class="ccnt" id="cnt-iss">&#21152;&#36733;&#20013;...</div></div>
+    <div class="ctog"></div>
+  </div>
+</div>
+<div id="sat-card">
+  <div class="sh">
+    <div><div class="sname" id="sname">&#8212;</div><div class="stype" id="stype">&#8212;</div></div>
+    <div class="cls" onclick="closeCard()">&#x2715;</div>
+  </div>
+  <div class="sdiv"></div>
+  <div class="sstats">
+    <div class="si"><div class="sl">&#36136;&#36947;&#39640;&#24230;</div><div class="sv"><span id="salt">&#8212;</span><span class="su">km</span></div></div>
+    <div class="si"><div class="sl">&#39131;&#34892;&#36895;&#24230;</div><div class="sv"><span id="svel">&#8212;</span><span class="su">km/s</span></div></div>
+    <div class="si"><div class="sl">&#36136;&#36947;&#20797;&#35282;</div><div class="sv"><span id="sinc">&#8212;</span><span class="su">&#176;</span></div></div>
+    <div class="si"><div class="sl">&#32469;&#22320;&#21608;&#26399;</div><div class="sv"><span id="sper">&#8212;</span><span class="su">min</span></div></div>
+  </div>
+  <div class="spos" id="spos">&#32463;&#24230; &#8212; | &#32441;&#24230; &#8212;</div>
+  <div class="scov">
+    <span class="covlbl">&#20449;&#21495;&#35206;&#30424;</span>
+    <div class="covbar"><div class="covfill" id="covfill" style="width:0%"></div></div>
+    <span style="font-size:10px;color:rgba(160,200,255,.38)" id="covpct">&#8212;</span>
+  </div>
+</div>
+<div id="statsbar">
+  <div class="sseg"><div class="sdot" style="background:#a78bfa"></div>Starlink<span class="snum" id="n-starlink">0</span></div>
+  <div class="sseg"><div class="sdot" style="background:#60a5fa"></div>GPS<span class="snum" id="n-gps">0</span></div>
+  <div class="sseg"><div class="sdot" style="background:#fb923c"></div>&#21271;&#26007;<span class="snum" id="n-beidou">0</span></div>
+  <div class="sseg"><div class="sdot" style="background:#34d399"></div>ISS<span class="snum" id="n-iss">0</span></div>
+</div>
+<button id="mbtn" onclick="toggleMeteor()" title="&#27969;&#26143;&#38632;&#27169;&#24335;">&#9732;</button>
+<div id="hint">&#128433; &#25320;&#25167;&#26059;&#36716; &middot; &#28378;&#36733;&#32553;&#25918;<br>&#128752; &#28857;&#20987;&#21463;&#26143;&#26597;&#30475;&#23454;&#26102;&#25968;&#25454;<br>&#9732; &#35302;&#21457;&#27969;&#26143;&#38632;&#29305;&#25928;</div>
+<script>
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkODg4MmNkMy02YzVjLTQ2ZDItYThiYy03MmNjNTk5ZWRmYzciLCJpZCI6NDA0NTMyLCJpYXQiOjE3NzM2NjcyNDl9.FySpItA3WmgjP7dZvTquwoujQ1IbqZa72VadnCd3rmI';
+
+const CFG = {
+  starlink:{name:'Starlink',color:'#a78bfa',max:200,orbitH:1.5,type:'低轨通信卫星群 · LEO · ~550km',
+    urls:['https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=JSON']},
+  gps:{name:'GPS',color:'#60a5fa',max:40,orbitH:6,type:'全球定位系统 · MEO · 20200km',
+    urls:['https://celestrak.org/NORAD/elements/gp.php?GROUP=GPS-OPS&FORMAT=JSON']},
+  beidou:{name:'北斗',color:'#fb923c',max:50,orbitH:6,type:'北斗导航系统 · 混合轨道',
+    urls:['https://celestrak.org/NORAD/elements/gp.php?GROUP=BEIDOU&FORMAT=JSON']},
+  iss:{name:'ISS',color:'#34d399',max:1,orbitH:2,type:'国际空间站 · LEO · ~420km',
+    urls:['https://celestrak.org/NORAD/elements/gp.php?GROUP=STATIONS&FORMAT=JSON']},
+};
+
+const BACKUP={
+  iss:[{name:'ISS (ZARYA)',l1:'1 25544U 98067A   24095.50000000  .00016717  00000-0  10270-3 0  9003',l2:'2 25544  51.6412  95.3789 0001357  82.3456  17.6543 15.50377098432400'}],
+  gps:[
+    {name:'GPS BIIR-2 (PRN 13)',l1:'1 24876U 97035A   24095.50000000 -.00000013  00000-0  00000-0 0  9006',l2:'2 24876  55.4523  54.2345 0048274 214.3456 145.2345  2.00555578196543'},
+    {name:'GPS BIIR-3 (PRN 11)',l1:'1 25933U 99055A   24095.50000000 -.00000024  00000-0  00000-0 0  9004',l2:'2 25933  51.4234 114.3456 0141234  98.3456 263.1234  2.00560765234567'},
+    {name:'GPS BIIF-1 (PRN 25)',l1:'1 36585U 10022A   24095.50000000 -.00000057  00000-0  00000-0 0  9001',l2:'2 36585  55.0123 174.5678 0097234 128.5678 232.4321  2.00564321345678'},
+    {name:'GPS BIIF-2 (PRN 01)',l1:'1 37753U 11036A   24095.50000000 -.00000078  00000-0  00000-0 0  9002',l2:'2 37753  55.1234 294.7890 0036523  48.7890 311.4321  2.00566543456789'},
+    {name:'GPS BIII-1 (PRN 04)',l1:'1 43873U 18109A   24095.50000000  .00000023  00000-0  00000-0 0  9008',l2:'2 43873  55.0456 234.5678 0004567 123.4567 236.5432  2.00567890678901'},
+    {name:'GPS BIII-3 (PRN 18)',l1:'1 45854U 20041A   24095.50000000  .00000012  00000-0  00000-0 0  9003',l2:'2 45854  55.1234 354.5678 0003456  23.5678  56.4321  2.00568901789012'},
+    {name:'GPS BIII-4 (PRN 23)',l1:'1 46826U 20068A   24095.50000000  .00000034  00000-0  00000-0 0  9005',l2:'2 46826  55.0789  74.6789 0002345 234.5670  45.4320  2.00569012890123'},
+    {name:'GPS BIII-5 (PRN 10)',l1:'1 48859U 21054A   24095.50000000  .00000018  00000-0  00000-0 0  9007',l2:'2 48859  55.2345 154.7890 0001234  12.3456 347.6543  2.00570123901234'},
+  ],
+  beidou:[
+    {name:'BEIDOU-3 M1',l1:'1 43001U 17069A   24095.50000000  .00000023  00000-0  00000-0 0  9001',l2:'2 43001  55.2345  15.4321 0006234 234.5678 125.4321  2.00575432123456'},
+    {name:'BEIDOU-3 M2',l1:'1 43002U 17069B   24095.50000000  .00000034  00000-0  00000-0 0  9002',l2:'2 43002  55.1234  75.5432 0005678  45.6789 314.3210  2.00576543234567'},
+    {name:'BEIDOU-3 M3',l1:'1 43208U 18010A   24095.50000000  .00000034  00000-0  00000-0 0  9004',l2:'2 43208  55.3456 135.6789 0007345  45.6789 314.3210  2.00574321234567'},
+    {name:'BEIDOU-3 M4',l1:'1 43209U 18010B   24095.50000000  .00000045  00000-0  00000-0 0  9005',l2:'2 43209  55.4567 195.7890 0008456  56.7890  63.2109  2.00573210345678'},
+    {name:'BEIDOU-3 G1',l1:'1 43539U 18052A   24095.50000000 -.00000231  00000-0  00000-0 0  9003',l2:'2 43539   1.7890 110.2345 0004321 231.2345 128.7654  1.00273012345678'},
+    {name:'BEIDOU-3 G2',l1:'1 44709U 19090A   24095.50000000 -.00000198  00000-0  00000-0 0  9004',l2:'2 44709   2.1234 150.3456 0003210 120.3456  239.654  1.00274123456789'},
+    {name:'BEIDOU-3 I1',l1:'1 44204U 19035A   24095.50000000 -.00000112  00000-0  00000-0 0  9002',l2:'2 44204  55.1234 230.5678 0003214  54.3210 305.6789  1.00274123456789'},
+    {name:'BEIDOU-3 I2',l1:'1 44337U 19056A   24095.50000000 -.00000098  00000-0  00000-0 0  9003',l2:'2 44337  55.2345 350.6789 0002103  43.2109  316.789  1.00275234567890'},
+    {name:'BEIDOU-3 M5',l1:'1 43581U 18067A   24095.50000000  .00000056  00000-0  00000-0 0  9006',l2:'2 43581  55.5678 255.8901 0009567  67.8901  52.1098  2.00572109456789'},
+    {name:'BEIDOU-3 M6',l1:'1 43582U 18067B   24095.50000000  .00000067  00000-0  00000-0 0  9007',l2:'2 43582  55.6789 315.9012 0010678  78.9012  41.0987  2.00571098567890'},
+  ],
+  starlink:[
+    {name:'STARLINK-1007',l1:'1 44713U 19074A   24095.50000000  .00001234  00000-0  10234-3 0  9001',l2:'2 44713  53.0012  45.1234 0001234  90.1234 270.0123 15.05234567890123'},
+    {name:'STARLINK-1008',l1:'1 44714U 19074B   24095.50000000  .00001345  00000-0  11234-3 0  9002',l2:'2 44714  53.0023 105.2345 0001345 180.2345  30.1234 15.05234678901234'},
+    {name:'STARLINK-1009',l1:'1 44715U 19074C   24095.50000000  .00001456  00000-0  12234-3 0  9003',l2:'2 44715  53.0034 225.3456 0001456 270.3456 150.2345 15.05234789012345'},
+    {name:'STARLINK-1010',l1:'1 44716U 19074D   24095.50000000  .00001567  00000-0  13234-3 0  9004',l2:'2 44716  53.0045 345.4567 0001567   0.4567 270.3456 15.05234890123456'},
+    {name:'STARLINK-1011',l1:'1 44717U 19074E   24095.50000000  .00001678  00000-0  14234-3 0  9005',l2:'2 44717  53.0056  65.5678 0001678  90.5678  30.4567 15.05234901234567'},
+    {name:'STARLINK-1012',l1:'1 44718U 19074F   24095.50000000  .00001789  00000-0  15234-3 0  9006',l2:'2 44718  53.0067 185.6789 0001789 180.6789 150.5678 15.05235012345678'},
+    {name:'STARLINK-1013',l1:'1 44719U 19074G   24095.50000000  .00001890  00000-0  16234-3 0  9007',l2:'2 44719  53.0078 305.7890 0001890 270.7890 270.6789 15.05235123456789'},
+    {name:'STARLINK-1014',l1:'1 44720U 19074H   24095.50000000  .00001901  00000-0  17234-3 0  9008',l2:'2 44720  53.0089  65.8901 0001901  10.8901  50.7890 15.05235234567890'},
+    {name:'STARLINK-1015',l1:'1 44721U 19074J   24095.50000000  .00002012  00000-0  18234-3 0  9009',l2:'2 44721  53.0100 125.9012 0002012 100.9012 130.8901 15.05235345678901'},
+    {name:'STARLINK-1016',l1:'1 44722U 19074K   24095.50000000  .00002123  00000-0  19234-3 0  9001',l2:'2 44722  53.0111 185.0123 0002123 190.0123 210.9012 15.05235456789012'},
+    {name:'STARLINK-1017',l1:'1 44723U 19074L   24095.50000000  .00002234  00000-0  20234-3 0  9002',l2:'2 44723  53.0122 245.1234 0002234 280.1234 290.0123 15.05235567890123'},
+    {name:'STARLINK-1018',l1:'1 44724U 19074M   24095.50000000  .00002345  00000-0  21234-3 0  9003',l2:'2 44724  53.0133 305.2345 0002345  10.2345  10.1234 15.05235678901234'},
+    {name:'STARLINK-1019',l1:'1 44725U 19074N   24095.50000000  .00002456  00000-0  22234-3 0  9004',l2:'2 44725  53.0144   5.3456 0002456 100.3456  90.2345 15.05235789012345'},
+    {name:'STARLINK-1020',l1:'1 44726U 19074P   24095.50000000  .00002567  00000-0  23234-3 0  9005',l2:'2 44726  53.0155  65.4567 0002567 190.4567 170.3456 15.05235890123456'},
+    {name:'STARLINK-1021',l1:'1 44727U 19074Q   24095.50000000  .00002678  00000-0  24234-3 0  9006',l2:'2 44727  53.0166 125.5678 0002678 280.5678 250.4567 15.05235901234567'},
+    {name:'STARLINK-1022',l1:'1 44728U 19074R   24095.50000000  .00002789  00000-0  25234-3 0  9007',l2:'2 44728  53.0177 185.6789 0002789  10.6789 330.5678 15.05236012345678'},
+    {name:'STARLINK-1023',l1:'1 44729U 19074S   24095.50000000  .00002890  00000-0  26234-3 0  9008',l2:'2 44729  53.0188 245.7890 0002890 100.7890  50.6789 15.05236123456789'},
+    {name:'STARLINK-1024',l1:'1 44730U 19074T   24095.50000000  .00002901  00000-0  27234-3 0  9009',l2:'2 44730  53.0199 305.8901 0002901 190.8901 130.7890 15.05236234567890'},
+    {name:'STARLINK-2001',l1:'1 45178U 20001A   24095.50000000  .00003012  00000-0  28234-3 0  9001',l2:'2 45178  53.0210  25.9012 0003012 280.9012 210.8901 15.05236345678901'},
+    {name:'STARLINK-2002',l1:'1 45179U 20001B   24095.50000000  .00003123  00000-0  29234-3 0  9002',l2:'2 45179  53.0221  85.0123 0003123  10.0123 290.9012 15.05236456789012'},
+    {name:'STARLINK-2003',l1:'1 45180U 20001C   24095.50000000  .00003234  00000-0  30234-3 0  9003',l2:'2 45180  53.0232 145.1234 0003234 100.1234  10.0123 15.05236567890123'},
+    {name:'STARLINK-2004',l1:'1 45181U 20001D   24095.50000000  .00003345  00000-0  31234-3 0  9004',l2:'2 45181  53.0243 205.2345 0003345 190.2345  90.1234 15.05236678901234'},
+    {name:'STARLINK-2005',l1:'1 45182U 20001E   24095.50000000  .00003456  00000-0  32234-3 0  9005',l2:'2 45182  53.0254 265.3456 0003456 280.3456 170.2345 15.05236789012345'},
+    {name:'STARLINK-2006',l1:'1 45183U 20001F   24095.50000000  .00003567  00000-0  33234-3 0  9006',l2:'2 45183  53.0265 325.4567 0003567  10.4567 250.3456 15.05236890123456'},
+    {name:'STARLINK-2007',l1:'1 45184U 20001G   24095.50000000  .00003678  00000-0  34234-3 0  9007',l2:'2 45184  53.0276  25.5678 0003678 100.5678 330.4567 15.05236901234567'},
+    {name:'STARLINK-2008',l1:'1 45185U 20001H   24095.50000000  .00003789  00000-0  35234-3 0  9008',l2:'2 45185  53.0287  85.6789 0003789 190.6789  50.5678 15.05237012345678'},
+    {name:'STARLINK-3001',l1:'1 47688U 21020A   24095.50000000  .00004012  00000-0  36234-3 0  9001',l2:'2 47688  53.0310 205.8901 0004012  10.8901 210.7890 15.05237234567890'},
+    {name:'STARLINK-3002',l1:'1 47689U 21020B   24095.50000000  .00004123  00000-0  37234-3 0  9002',l2:'2 47689  53.0321 265.9012 0004123 100.9012 290.8901 15.05237345678901'},
+    {name:'STARLINK-3003',l1:'1 47690U 21020C   24095.50000000  .00004234  00000-0  38234-3 0  9003',l2:'2 47690  53.0332 325.0123 0004234 190.0123  10.9012 15.05237456789012'},
+    {name:'STARLINK-3004',l1:'1 47691U 21020D   24095.50000000  .00004345  00000-0  39234-3 0  9004',l2:'2 47691  53.0343  25.1234 0004345 280.1234  90.0123 15.05237567890123'},
+  ],
+};
+
+const allSats={},vis={starlink:true,gps:true,beidou:true,iss:true};
+let tracked=null,meteorOn=false,meteors=[];
+
+const viewer=new Cesium.Viewer('cesiumContainer',{
+  terrain:Cesium.Terrain.fromWorldTerrain({requestVertexNormals:true}),
+  animation:false,baseLayerPicker:false,fullscreenButton:false,vrButton:false,
+  geocoder:false,homeButton:false,infoBox:false,sceneModePicker:false,
+  selectionIndicator:false,timeline:false,navigationHelpButton:false,shouldAnimate:true,
+});
+viewer.scene.globe.enableLighting=true;
+viewer.scene.skyAtmosphere.show=true;
+viewer.scene.highDynamicRange=false;
+viewer.scene.globe.depthTestAgainstTerrain=false;
+Cesium.IonImageryProvider.fromAssetId(3812).then(p=>{const l=viewer.imageryLayers.addImageryProvider(p);l.dayAlpha=0;l.nightAlpha=0.88;l.brightness=2.2;}).catch(()=>{});
+viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(110,25,22000000),orientation:{heading:0,pitch:Cesium.Math.toRadians(-90),roll:0}});
+setInterval(()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');document.getElementById('utc-clock').textContent='UTC '+p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds());},1000);
+
+function setStatus(txt,pct){document.getElementById('lstatus').textContent=txt;if(pct!=null)document.getElementById('lfill').style.width=pct+'%';}
+
+function parseTxt(text,max){
+  const lines=text.trim().split('\n').map(l=>l.trim()).filter(Boolean),out=[];
+  for(let i=0;i+2<lines.length&&out.length<max;i+=3){
+    const n=lines[i].replace(/^0 /,'').trim(),l1=lines[i+1],l2=lines[i+2];
+    if(l1&&l1.startsWith('1 ')&&l2&&l2.startsWith('2 ')) out.push({name:n,l1,l2});
+  }
+  return out;
+}
+
+async function loadTLE(key){
+  const cfg=CFG[key];
+  for(const url of cfg.urls){
+    try{
+      const res=await fetch(url);
+      if(!res.ok) continue;
+      const txt=await res.text();
+      let items=[];
+      // 尝试 JSON 格式
+      try{
+        const json=JSON.parse(txt);
+        if(Array.isArray(json)&&json.length>0){
+          items=json.slice(0,cfg.max).map(d=>({
+            name:d.OBJECT_NAME||d.name||'SAT',
+            l1:d.TLE_LINE1||d.line1||'',
+            l2:d.TLE_LINE2||d.line2||'',
+          })).filter(d=>d.l1&&d.l2);
+        }
+      } catch(e){
+        // TXT 格式
+        items=parseTxt(txt,cfg.max);
+      }
+      if(items.length>0){console.log('OK '+key+' '+items.length+' from '+url);return items;}
+    }catch(e){console.warn(key+' '+url+' failed:',e.message);}
+  }
+  console.warn(key+': using offline backup ('+BACKUP[key].length+' sats)');
+  return(BACKUP[key]||[]).map(b=>({name:b.name,l1:b.l1,l2:b.l2}));
+}
+
+function getPos(satrec){
+  const now=new Date(),pv=satellite.propagate(satrec,now);
+  if(!pv||!pv.position||typeof pv.position.x!=='number') return null;
+  const gmst=satellite.gstime(now),geo=satellite.eciToGeodetic(pv.position,gmst);
+  const lon=satellite.degreesLong(geo.longitude),lat=satellite.degreesLat(geo.latitude),alt=geo.height*1000;
+  if(isNaN(lon)||isNaN(lat)||alt<0) return null;
+  return{lon,lat,alt,altKm:geo.height,pv};
+}
+
+function buildOrbit(satrec,hours){
+  const pts=[],now=Date.now(),steps=hours*60*2;
+  for(let i=0;i<=steps;i++){
+    const t=new Date(now+i*30000),pv=satellite.propagate(satrec,t);
+    if(!pv||!pv.position||typeof pv.position.x!=='number') continue;
+    const gmst=satellite.gstime(t),geo=satellite.eciToGeodetic(pv.position,gmst);
+    const lon=satellite.degreesLong(geo.longitude),lat=satellite.degreesLat(geo.latitude),alt=geo.height*1000;
+    if(!isNaN(lon)&&!isNaN(lat)&&alt>0) pts.push(Cesium.Cartesian3.fromDegrees(lon,lat,alt));
+  }
+  return pts;
+}
+
+function buildEntities(key,items){
+  const cfg=CFG[key],color=Cesium.Color.fromCssColorString(cfg.color);
+  const isISS=key==='iss',isSL=key==='starlink',sats=[];
+  items.forEach(item=>{
+    let satrec;try{satrec=satellite.twoline2satrec(item.l1,item.l2);}catch(e){return;}
+    if(isNaN(satrec.no)) return;
+    const r=getPos(satrec);if(!r) return;
+    const entity=viewer.entities.add({
+      position:Cesium.Cartesian3.fromDegrees(r.lon,r.lat,r.alt),
+      point:{pixelSize:isISS?16:isSL?4:8,color:color.withAlpha(isISS?1:.92),outlineColor:color.withAlpha(.3),outlineWidth:isISS?2.5:0,disableDepthTestDistance:Number.POSITIVE_INFINITY,scaleByDistance:new Cesium.NearFarScalar(500000,1.8,25000000,.45)},
+      label:isISS?{text:'ISS',font:'11px monospace',fillColor:Cesium.Color.fromCssColorString('#34d399'),outlineColor:Cesium.Color.BLACK,outlineWidth:2,style:Cesium.LabelStyle.FILL_AND_OUTLINE,pixelOffset:new Cesium.Cartesian2(0,-22),disableDepthTestDistance:Number.POSITIVE_INFINITY,scaleByDistance:new Cesium.NearFarScalar(500000,1.1,20000000,.3)}:undefined,
+      properties:{key,name:item.name,satrec},
+    });
+    let orbitEntity=null;
+    if(!isSL){
+      const pts=buildOrbit(satrec,cfg.orbitH);
+      if(pts.length>2) orbitEntity=viewer.entities.add({polyline:{positions:pts,width:isISS?1.5:.7,material:new Cesium.PolylineGlowMaterialProperty({glowPower:isISS?.5:.18,color:color.withAlpha(isISS?.62:.22)})}});
+    }
+    sats.push({name:item.name,satrec,entity,orbitEntity,key});
+  });
+  allSats[key]=sats;
+  const n=sats.length;
+  document.getElementById('cnt-'+key).textContent=n+' 颗在轨';
+  document.getElementById('n-'+key).textContent=n;
+}
+
+setInterval(()=>{
+  Object.values(allSats).forEach(sats=>sats.forEach(sat=>{
+    if(!sat.entity.show) return;
+    const r=getPos(sat.satrec);
+    if(r) sat.entity.position=new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(r.lon,r.lat,r.alt));
+  }));
+  if(tracked) updateCard(tracked);
+},1000);
+
+function toggle(key){
+  vis[key]=!vis[key];
+  document.getElementById('cb-'+key).classList.toggle('off',!vis[key]);
+  (allSats[key]||[]).forEach(s=>{s.entity.show=vis[key];if(s.orbitEntity)s.orbitEntity.show=vis[key];});
+}
+
+viewer.screenSpaceEventHandler.setInputAction(click=>{
+  const p=viewer.scene.pick(click.position);
+  if(!Cesium.defined(p&&p.id)) return;
+  const props=p.id.properties;if(!props||!props.key) return;
+  const sat={key:props.key.getValue(),name:props.name.getValue(),satrec:props.satrec.getValue()};
+  tracked=sat;
+  const colors={starlink:'#a78bfa',gps:'#60a5fa',beidou:'#fb923c',iss:'#34d399'};
+  const card=document.getElementById('sat-card');
+  card.style.display='block';card.style.borderTopColor=colors[sat.key]||'#60a8ff';
+  document.getElementById('hint').style.display='none';
+  updateCard(sat);
+},Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+function updateCard(sat){
+  const now=new Date(),pv=satellite.propagate(sat.satrec,now);
+  if(!pv||!pv.position) return;
+  const gmst=satellite.gstime(now),geo=satellite.eciToGeodetic(pv.position,gmst);
+  const lon=satellite.degreesLong(geo.longitude).toFixed(2),lat=satellite.degreesLat(geo.latitude).toFixed(2),altKm=geo.height.toFixed(0);
+  let vel='—';if(pv.velocity){const v=pv.velocity;vel=Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z).toFixed(2);}
+  const inc=sat.satrec.inclo?(sat.satrec.inclo*180/Math.PI).toFixed(1):'—';
+  const per=sat.satrec.no?(2*Math.PI/sat.satrec.no).toFixed(1):'—';
+  const covPct=Math.min(99,Math.round((1-Math.cos(Math.acos(Math.min(1,6371/(6371+geo.height)))*Math.PI/180))/2*100));
+  document.getElementById('sname').textContent=sat.name;
+  document.getElementById('stype').textContent=CFG[sat.key]&&CFG[sat.key].type||sat.key;
+  document.getElementById('salt').textContent=altKm;
+  document.getElementById('svel').textContent=vel;
+  document.getElementById('sinc').textContent=inc;
+  document.getElementById('sper').textContent=per;
+  document.getElementById('spos').textContent='经度 '+lon+'°  ·  纬度 '+lat+'°';
+  document.getElementById('covfill').style.width=covPct+'%';
+  document.getElementById('covpct').textContent=covPct+'%';
+}
+
+function closeCard(){document.getElementById('sat-card').style.display='none';document.getElementById('hint').style.display='block';tracked=null;}
+
+function toggleMeteor(){
+  meteorOn=!meteorOn;
+  document.getElementById('mbtn').classList.toggle('on',meteorOn);
+  if(meteorOn) scheduleMeteors();
+  else{meteors.forEach(e=>viewer.entities.remove(e));meteors=[];}
+}
+
+function scheduleMeteors(){
+  if(!meteorOn) return;
+  for(let i=0;i<10;i++) setTimeout(()=>{if(meteorOn)spawnOne();},i*200);
+  setTimeout(scheduleMeteors,2600);
+}
+
+function spawnOne(){
+  const lon=(Math.random()-.5)*360,lat=(Math.random()-.5)*130;
+  const sH=(350+Math.random()*650)*1000,eH=65000;
+  const eLon=lon+(Math.random()-.5)*12,eLat=lat+(Math.random()-.5)*12;
+  const dur=1.2+Math.random()*2.5;
+  const sp=new Cesium.SampledPositionProperty();
+  const t0=Cesium.JulianDate.now(),t1=Cesium.JulianDate.addSeconds(t0,dur,new Cesium.JulianDate());
+  sp.addSample(t0,Cesium.Cartesian3.fromDegrees(lon,lat,sH));
+  sp.addSample(t1,Cesium.Cartesian3.fromDegrees(eLon,eLat,eH));
+  const pal=['#ffffff','#d4b0ff','#90c8ff','#ffd090','#b0ffee'];
+  const mc=Cesium.Color.fromCssColorString(pal[Math.floor(Math.random()*pal.length)]);
+  const e=viewer.entities.add({
+    position:sp,
+    availability:new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({start:t0,stop:t1})]),
+    point:{pixelSize:4+Math.random()*8,color:mc.withAlpha(.95),disableDepthTestDistance:Number.POSITIVE_INFINITY},
+    path:{resolution:1,material:new Cesium.PolylineGlowMaterialProperty({glowPower:.6,color:mc.withAlpha(.75)}),width:2+Math.random()*4,leadTime:0,trailTime:dur},
+  });
+  meteors.push(e);
+  setTimeout(()=>{viewer.entities.remove(e);const i=meteors.indexOf(e);if(i>-1)meteors.splice(i,1);},dur*1000+700);
+}
+
+async function main(){
+  setStatus('初始化 Cesium 地球...',5);
+  await new Promise(res=>{
+    const u=viewer.scene.globe.tileLoadProgressEvent.addEventListener(q=>{if(q===0){u();res();}});
+    setTimeout(res,5000);
+  });
+  const steps=[{key:'iss',p0:12,p1:28},{key:'gps',p0:28,p1:52},{key:'beidou',p0:52,p1:74},{key:'starlink',p0:74,p1:96}];
+  for(const {key,p0,p1} of steps){
+    setStatus('拉取 '+CFG[key].name+' 数据...',p0);
+    const items=await loadTLE(key);
+    setStatus('渲染 '+CFG[key].name+'（'+items.length+' 颗）...',p1-4);
+    buildEntities(key,items);
+    setStatus(CFG[key].name+' ✓',p1);
+  }
+  setStatus('全部加载完成 ✓',100);
+  setTimeout(()=>document.getElementById('loading').classList.add('gone'),900);
+}
+main();
+</script>
+</body>
+</html>
